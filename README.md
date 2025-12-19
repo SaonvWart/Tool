@@ -47,8 +47,11 @@
 ### 7. 其他工具
 - 二维码/条形码生成
 - 4399账号转Cookie
-- Google搜索/翻译
+- Google翻译
 - Python代码编译
+- 身份證生成器
+- 柏林噪聲生成器
+- 图片/视频转字符艺术
 
 ## 快速开始
 
@@ -63,9 +66,9 @@
 git clone https://github.com/SaonvWart/Tool.git
 cd Tool
 
-
-
-
-
+### 提示
+- Google搜索 功能不正常工作
+- 網盤API 功能不正常工作
+- 图片/视频转字符艺术 功能不正常工作
 
 作者小聲逼逼: 用了AI輔助
