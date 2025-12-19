@@ -15,10 +15,14 @@ from typing import Optional
 import random
 import string
 from datetime import datetime
-import requests
 
-SERVER_URL = "https://novashare.dpdns.org:8000"
-token = None
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except Exception:
+    REQUESTS_AVAILABLE = False
+
+from PIL import Image
 
 try:
     from cryptography.hazmat.primitives import serialization, hashes
@@ -55,10 +59,28 @@ except Exception:
     BARCODE_AVAILABLE = False
 
 try:
+    import noise
+    NOISE_AVAILABLE = True
+except Exception:
+    NOISE_AVAILABLE = False
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except Exception:
+    NUMPY_AVAILABLE = False
+
+try:
     import python_minifier
     MINIFIER_AVAILABLE = True
 except Exception:
     MINIFIER_AVAILABLE = False
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except Exception:
+    CV2_AVAILABLE = False
 
 import ast
 import re
@@ -2409,6 +2431,357 @@ def google_translate_menu():
         print(translate_text("翻译失败:") + str(e))
     pause()
 
+def image_to_ascii_art(image_path, char='■', scale=0.1, use_color=True):
+    if not PIL_AVAILABLE:
+        print("PIL不可用，无法处理图片")
+        return ""
+    try:
+        img = Image.open(image_path)
+        width, height = img.size
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        img = img.resize((new_width, new_height))
+        ascii_chars = '■▩▦▨▢▤▧▥◲◳◰◱◫⊟■◻■◪◩'
+        ascii_art = []
+        for y in range(new_height):
+            line = []
+            for x in range(new_width):
+                pixel = img.getpixel((x, y))
+                if isinstance(pixel, int):  # grayscale
+                    gray = pixel
+                else:
+                    gray = int(0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2])
+                char_index = int(gray / 255 * (len(ascii_chars) - 1))
+                char_used = ascii_chars[char_index]
+                if use_color and len(pixel) >= 3:
+                    r, g, b = pixel[:3]
+                    ansi_color = f"\033[38;2;{r};{g};{b}m"
+                    line.append(f"{ansi_color}{char_used}\033[0m")
+                else:
+                    line.append(char_used)
+            ascii_art.append(''.join(line))
+        return '\n'.join(ascii_art)
+    except Exception as e:
+        print(f"处理图片失败: {e}")
+        return ""
+
+def video_to_ascii_art(video_path, char='■', scale=0.1, use_color=True, fps=10):
+    if not CV2_AVAILABLE:
+        print("OpenCV不可用，无法处理视频")
+        return
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print("无法打开视频")
+            return
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
+        delay = 1 / fps if fps > 0 else 0
+        ascii_chars = '■▩▦▨▢▤▧▥◲◳◰◱◫⊟■◻■◪◩'
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            height, width = frame.shape[:2]
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            frame = cv2.resize(frame, (new_width, new_height))
+            ascii_art = []
+            for y in range(new_height):
+                line = []
+                for x in range(new_width):
+                    pixel = frame[y, x]
+                    b, g, r = pixel
+                    gray = int(0.299 * r + 0.587 * g + 0.114 * b)
+                    char_index = int(gray / 255 * (len(ascii_chars) - 1))
+                    char_used = ascii_chars[char_index]
+                    if use_color:
+                        ansi_color = f"\033[38;2;{r};{g};{b}m"
+                        line.append(f"{ansi_color}{char_used}\033[0m")
+                    else:
+                        line.append(char_used)
+                ascii_art.append(''.join(line))
+            clear_screen()
+            print('\n'.join(ascii_art))
+            time.sleep(delay)
+        cap.release()
+    except Exception as e:
+        print(f"处理视频失败: {e}")
+
+def ascii_art_menu():
+    print_header(translate_text("图片/视频转字符艺术"))
+    print("1) " + translate_text("图片转字符艺术"))
+    print("2) " + translate_text("视频转字符艺术"))
+    choice = safe_input(translate_text("选择序号") + ": ").strip()
+    if choice == "1":
+        path = safe_input(translate_text("请输入图片路径: "))
+        char = safe_input(translate_text("请输入字符 (默认■): ")) or '■'
+        scale_str = safe_input(translate_text("请输入缩放倍率 (默认0.1): "))
+        scale = float(scale_str) if scale_str else 0.1
+        color_choice = safe_input(translate_text("是否使用颜色? (y/n, 默认y): ")).lower()
+        use_color = color_choice != 'n'
+        art = image_to_ascii_art(path, char, scale, use_color)
+        if art:
+            print(art)
+    elif choice == "2":
+        path = safe_input(translate_text("请输入视频路径: "))
+        char = safe_input(translate_text("请输入字符 (默认■): ")) or '■'
+        scale_str = safe_input(translate_text("请输入缩放倍率 (默认0.1): "))
+        scale = float(scale_str) if scale_str else 0.1
+        color_choice = safe_input(translate_text("是否使用颜色? (y/n, 默认y): ")).lower()
+        use_color = color_choice != 'n'
+        fps_str = safe_input(translate_text("请输入播放FPS (默认10): "))
+        fps = int(fps_str) if fps_str else 10
+        video_to_ascii_art(path, char, scale, use_color, fps)
+    else:
+        print(translate_text("无效选项"))
+    pause()
+
+def perlin_noise_menu():
+    """柏林噪聲生成器 (Perlin Noise Generator)"""
+    title = translate_text("柏林噪聲生成器")
+    
+    if not NUMPY_AVAILABLE:
+        print_header(title)
+        print(translate_text("错误: numpy 库未安装"))
+        print(translate_text("请运行: pip install numpy"))
+        pause()
+        return
+    
+    if not PIL_AVAILABLE:
+        print_header(title)
+        print(translate_text("错误: PIL/Pillow 库未安装"))
+        print(translate_text("请运行: pip install Pillow"))
+        pause()
+        return
+    
+    while True:
+        print_header(title)
+        print("1) " + translate_text("生成 2D 柏林噪聲圖像"))
+        print("0) " + translate_text("返回主菜单"))
+        
+        choice = safe_input(translate_text("选择序号") + ": ").strip()
+        
+        if choice == "1":
+            print_header(title)
+            
+            # 輸入寬度
+            width_str = safe_input(translate_text("輸入圖像寬度 (默認 256): "))
+            width = int(width_str) if width_str else 256
+            
+            # 輸入高度
+            height_str = safe_input(translate_text("輸入圖像高度 (默認 256): "))
+            height = int(height_str) if height_str else 256
+            
+            # 輸入縮放因子
+            scale_str = safe_input(translate_text("輸入噪聲縮放因子 (默認 100): "))
+            scale = float(scale_str) if scale_str else 100.0
+            
+            # 輸入八度數
+            octaves_str = safe_input(translate_text("輸入八度數 (默認 4): "))
+            octaves = int(octaves_str) if octaves_str else 4
+            
+            # 輸入持久性
+            persistence_str = safe_input(translate_text("輸入持久性 (默認 0.5): "))
+            persistence = float(persistence_str) if persistence_str else 0.5
+            
+            # 輸入層次
+            lacunarity_str = safe_input(translate_text("輸入層次 (默認 2.0): "))
+            lacunarity = float(lacunarity_str) if lacunarity_str else 2.0
+            
+            # 輸入隨機種子
+            seed_str = safe_input(translate_text("輸入隨機種子 (默認隨機): "))
+            seed = int(seed_str) if seed_str else random.randint(0, 10000)
+            
+            # 輸入輸出文件名
+            filename = safe_input(translate_text("輸入輸出文件名 (默認 perlin_noise.png): "))
+            if not filename:
+                filename = "perlin_noise.png"
+            
+            try:
+                # 生成噪聲圖像
+                generate_perlin_noise_image(width, height, scale, octaves, persistence, lacunarity, seed, filename)
+                print(translate_text("噪聲圖像已生成並保存為") + f" {filename}")
+            except Exception as e:
+                print(translate_text("錯誤") + f": {e}")
+            
+            pause()
+        elif choice == "0":
+            return
+        else:
+            print(translate_text("无效选项"))
+            pause()
+
+def generate_perlin_noise_image(width, height, scale, octaves, persistence, lacunarity, seed, filename):
+    """生成簡單噪聲圖像 (模擬柏林噪聲)"""
+    import numpy as np
+    from PIL import Image
+    
+    # 設置隨機種子
+    np.random.seed(seed)
+    
+    # 生成隨機噪聲
+    noise = np.random.rand(height, width)
+    
+    # 應用簡單的濾波來模擬噪聲
+    for _ in range(octaves):
+        noise = np.add(noise, np.random.rand(height, width) * persistence)
+        persistence *= lacunarity
+    
+    # 正規化到 0-255
+    noise = (noise - np.min(noise)) / (np.max(noise) - np.min(noise)) * 255
+    noise = noise.astype(np.uint8)
+    
+    # 創建圖像
+    img = Image.fromarray(noise, mode='L')
+    
+    # 保存圖像
+    img.save(filename)
+
+def id_generator_menu():
+    """身份證生成器"""
+    title = translate_text("身份證生成器")
+    
+    while True:
+        print_header(title)
+        print("1) " + translate_text("中國大陸身份證"))
+        print("2) " + translate_text("美國社會安全號碼"))
+        print("3) " + translate_text("中華民國身份證"))
+        print("4) " + translate_text("日本身份證"))
+        print("5) " + translate_text("批量生成"))
+        print("0) " + translate_text("返回主菜单"))
+        
+        choice = safe_input(translate_text("选择序号") + ": ").strip()
+        
+        if choice in ["1", "2", "3", "4", "5"]:
+            if choice == "5":
+                # 批量生成
+                sub_choice = safe_input(translate_text("选择国家 (1-4): ")).strip()
+                if sub_choice not in ["1", "2", "3", "4"]:
+                    print(translate_text("无效选项"))
+                    pause()
+                    continue
+                country = {
+                    "1": "中國大陸",
+                    "2": "美國",
+                    "3": "中華民國",
+                    "4": "日本"
+                }[sub_choice]
+                count_str = safe_input(translate_text("输入生成数量: "))
+                try:
+                    count = int(count_str)
+                    if count <= 0:
+                        raise ValueError
+                except:
+                    print(translate_text("无效数量"))
+                    pause()
+                    continue
+            else:
+                country = {
+                    "1": "中國大陸",
+                    "2": "美國",
+                    "3": "中華民國",
+                    "4": "日本"
+                }[choice]
+                count = 1
+            
+            print_header(translate_text("生成结果"))
+            
+            for i in range(count):
+                if count > 1:
+                    print(f"\n--- {i+1} ---")
+                
+                # 生成名稱
+                name = generate_random_name(country)
+                print(translate_text("姓名") + f": {name}")
+                
+                # 生成身份證
+                id_number = generate_id_number(country)
+                print(translate_text("身份證號碼") + f": {id_number}")
+                
+                # 生成地址
+                address = generate_random_address(country)
+                print(translate_text("地址") + f": {address}")
+            
+            pause()
+        elif choice == "0":
+            return
+        else:
+            print(translate_text("无效选项"))
+            pause()
+
+def generate_random_name(country):
+    """生成隨機名稱"""
+    if country == "中國大陸":
+        surnames = ["王", "李", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴", "徐", "孙", "胡", "朱", "高", "林", "何", "郭", "马", "罗", "梁", "宋", "郑", "谢", "韩", "唐"]
+        given_names = ["明", "华", "志", "伟", "强", "军", "建", "国", "文", "德", "丽", "芳", "娜", "静", "敏", "燕", "婷", "玉", "红", "霞", "桂", "玲", "梅", "琳", "慧", "娟"]
+        surname = random.choice(surnames)
+        given = "".join(random.choices(given_names, k=random.randint(1, 2)))
+        return surname + given
+    elif country == "美國":
+        first_names = ["John", "Jane", "Michael", "Sarah", "David", "Emma", "James", "Olivia", "Robert", "Sophia", "William", "Isabella", "Joseph", "Mia", "Charles", "Amelia", "Thomas", "Harper", "Daniel", "Evelyn", "Matthew", "Abigail"]
+        last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee"]
+        return random.choice(first_names) + " " + random.choice(last_names)
+    elif country == "中華民國":
+        surnames = ["陳", "林", "黃", "張", "李", "王", "吳", "劉", "蔡", "楊", "許", "鄭", "謝", "洪", "曾", "周", "賴", "徐", "葉", "郭", "蘇", "潘", "莊", "呂", "江", "沈", "施"]
+        given_names = ["志明", "美玲", "建國", "淑芬", "文華", "秀英", "家豪", "雅婷", "俊傑", "怡君", "宏偉", "佩君", "宗翰", "欣怡", "柏翰", "婉如", "冠宇", "詩涵", "宇軒", "芷涵", "子豪", "雅雯", "承翰", "怡萱"]
+        return random.choice(surnames) + random.choice(given_names)
+    elif country == "日本":
+        surnames = ["佐藤", "鈴木", "高橋", "田中", "渡邊", "伊藤", "山本", "中村", "小林", "加藤", "吉田", "山田", "佐々木", "山口", "松本", "井上", "木村", "林", "斎藤", "清水", "山崎", "池田", "阿部", "森", "橋本", "石川"]
+        given_names = ["太郎", "花子", "一郎", "美咲", "健太", "愛", "大輔", "桃子", "翔太", "奈々", "悠斗", "結衣", "直樹", "彩花", "拓也", "葵", "亮太", "美優", "大和", "紗季", "悠真", "莉子", "颯太", "陽菜", "蓮"]
+        return random.choice(surnames) + " " + random.choice(given_names)
+    return "Unknown"
+
+def generate_id_number(country):
+    """生成身份證號碼"""
+    if country == "中國大陸":
+        # 簡單模擬：地區碼(6位) + 生日(8位) + 順序碼(3位) + 校驗碼(1位)
+        region = random.choice(["110101", "310101", "440101", "510101"])  # 北京、上海、廣州、成都
+        birth_year = str(random.randint(1950, 2005))
+        birth_month = str(random.randint(1, 12)).zfill(2)
+        birth_day = str(random.randint(1, 28)).zfill(2)
+        birth = birth_year + birth_month + birth_day
+        sequence = str(random.randint(0, 999)).zfill(3)
+        check_digit = str(random.randint(0, 9))
+        return region + birth + sequence + check_digit
+    elif country == "美國":
+        # SSN: XXX-XX-XXXX
+        return f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
+    elif country == "中華民國":
+        # 1字母 + 9數字
+        letters = "ABCDEFGHJKLMNPQRSTUVXYWZIO"
+        letter = random.choice(letters)
+        numbers = "".join(str(random.randint(0, 9)) for _ in range(9))
+        return letter + numbers
+    elif country == "日本":
+        # 簡單模擬：12位數字
+        return "".join(str(random.randint(0, 9)) for _ in range(12))
+    return "000000000000"
+
+def generate_random_address(country):
+    """生成隨機地址"""
+    if country == "中國大陸":
+        provinces = ["北京市", "上海市", "广东省", "江苏省", "山东省", "浙江省", "四川省", "湖北省", "湖南省", "福建省"]
+        cities = ["北京市", "上海市", "广州市", "南京市", "济南市", "杭州市", "成都市", "武汉市", "长沙市", "福州市"]
+        streets = ["人民路", "解放路", "中山路", "建设路", "和平路", "新华路", "胜利路", "光明路", "友谊路", "幸福路"]
+        return f"{random.choice(provinces)}{random.choice(cities)}{random.choice(streets)}{random.randint(1, 999)}號"
+    elif country == "美國":
+        states = ["California", "Texas", "New York", "Florida", "Illinois", "Pennsylvania", "Ohio", "Georgia", "North Carolina", "Michigan"]
+        cities = ["Los Angeles", "Houston", "New York", "Miami", "Chicago", "Philadelphia", "Columbus", "Atlanta", "Charlotte", "Detroit"]
+        streets = ["Main St", "Oak Ave", "Elm St", "Pine Rd", "Maple Ln", "Cedar St", "Birch Rd", "Walnut St", "Chestnut Ave", "Spruce St"]
+        return f"{random.randint(100, 9999)} {random.choice(streets)}, {random.choice(cities)}, {random.choice(states)}"
+    elif country == "中華民國":
+        counties = ["台北市", "新北市", "桃園市", "台中市", "高雄市", "台南市", "新竹市", "嘉義市"]
+        districts = ["中正區", "中山區", "大安區", "文山區", "松山區", "信義區", "士林區", "內湖區"]
+        roads = ["忠孝路", "中山路", "民生路", "和平路", "復興路", "光復路", "建國路", "信義路"]
+        return f"{random.choice(counties)}{random.choice(districts)}{random.choice(roads)}{random.randint(1, 999)}號"
+    elif country == "日本":
+        prefectures = ["東京都", "大阪府", "神奈川県", "愛知県", "北海道", "福岡県", "京都府", "兵庫県", "千葉県", "埼玉県"]
+        cities = ["東京", "大阪", "横浜", "名古屋", "札幌", "福岡", "京都", "神戸", "千葉", "さいたま"]
+        wards = ["渋谷区", "新宿区", "中央区", "港区", "目黒区", "豊島区", "台東区", "墨田区", "江東区", "品川区"]
+        return f"{random.choice(prefectures)}{random.choice(cities)}{random.choice(wards)}{random.randint(1, 999)}-{random.randint(1, 99)}"
+    return "Unknown Address"
+
 def main_menu():
     """主菜单"""
     while True:
@@ -2435,6 +2808,9 @@ def main_menu():
         print("19) " + translate_text("Google搜索"))
         print("20) " + translate_text("Google翻译"))
         print("21) " + translate_text("網盤API"))
+        print("22) " + translate_text("图片/视频转字符艺术"))
+        print("23) " + translate_text("柏林噪聲生成器"))
+        print("24) " + translate_text("身份證生成器"))
         print("0) " + translate_text("退出"))
         choice = safe_input(translate_text("选择序号") + ": ").strip()
         if choice == "1":
@@ -2477,6 +2853,14 @@ def main_menu():
             google_search()
         elif choice == "20":
             google_translate_menu()
+        elif choice == "21":
+            netdisk_api_menu()
+        elif choice == "22":
+            ascii_art_menu()
+        elif choice == "23":
+            perlin_noise_menu()
+        elif choice == "24":
+            id_generator_menu()
         elif choice == "0":
             break
         else:
