@@ -16,6 +16,10 @@ import random
 import string
 from datetime import datetime
 
+# 版本信息
+Version = "v0.3-release"
+Form = "python"
+
 try:
     import requests
     REQUESTS_AVAILABLE = True
@@ -198,120 +202,6 @@ def generate_minecraft_account(account_type):
         'capes': capes,
     }
 
-def login_4399(username, password, verify_code, verify_session):
-    all_chars = string.ascii_uppercase + string.digits + string.ascii_lowercase
-    deviceid_chars = string.ascii_uppercase + string.digits
-    login_session = requests.Session()
-
-    deviceid = ''.join(random.choice(deviceid_chars) for _ in range(32))
-    timestamp = str(int(time.time() * 1000))
-    print("验证会话ID:", verify_session)
-    print("时间戳:", timestamp)
-    print("设备ID:", deviceid)
-
-    login_data = "loginFrom=uframe&"
-    login_data += "postLoginHandler=default&"
-    login_data += "layoutSelfAdapting=true&"
-    login_data += "externalLogin=qq&"
-    login_data += "displayMode=popup&"
-    login_data += "layout=vertical&"
-    login_data += "bizId=2201001794&"
-    login_data += "appId=kid_wdsj&"
-    login_data += "gameId=wd&"
-    login_data += "css=http://microgame.5054399.net/v2/resource/cssSdk/default/login.css&"
-    login_data += "redirectUrl=&"
-    login_data += "mainDivId=popup_login_div&"
-    login_data += "includeFcmInfo=false&"
-    login_data += "level=8&"
-    login_data += "regLevel=8&"
-    login_data += "userNameLabel=4399%E7%94%A8%E6%88%B7%E5%90%8D&"
-    login_data += "userNameTip=%E8%AF%B7%E8%BE%93%E5%85%A54399%E7%94%A8%E6%88%B7%E5%90%8D&"
-    login_data += "welcomeTip=%E6%AC%A2%E8%BF%8E%E5%9B%9E%E5%88%B04399&"
-    login_data += f"sec=1&sessionId={verify_session}&"
-    login_data += f"inputCaptcha={verify_code}&"
-    login_data += f"username={username}&"
-    login_data += f"password={password}"
-
-    login_header = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-        "Referer": "https://ptlogin.4399.com/ptlogin/regFrame.do?regMode=reg_normal&postLoginHandler=default&bizId=&redirectUrl=&displayMode=popup&css=&appId=www_home&gameId=&noEmail=false&regIdcard=false&autoLogin=true&cid=&aid=&level=4&mainDivId=popup_reg_div&includeFcmInfo=false&externalLogin=qq&fcmFakeValidate=true&expandFcmInput=true&userNameLabel=4399%E7%94%A8%E6%88%B7%E5%90%8D&userNameTip=%E8%AF%B7%E8%BE%93%E5%85%A54399%E7%94%A8%E6%88%B7%E5%90%8D&welcomeTip=%E6%AC%A2%E8%BF%8E%E5%9B%9E%E5%88%B04399&v=1720684215067&iframeId=popup_reg_frame",
-        "Origin": "https://ptlogin.4399.com",
-        "Content-type": "application/x-www-form-urlencoded"
-    }
-
-    login_resp = login_session.post("https://ptlogin.4399.com/ptlogin/login.do?v=1", headers=login_header, data=login_data)
-
-    if login_resp.text.find("验证码错误") != -1:
-        raise Exception("验证码错误，请重新输入")
-
-    if login_resp.text.find("密码错误") != -1:
-        raise Exception("密码错误，请检查后重试")
-
-    if login_resp.text.find("用户名不存在") != -1:
-        raise Exception("用户名不存在，请检查用户名")
-
-    check_kid = login_session.post(f"http://ptlogin.4399.com/ptlogin/checkKidLoginUserCookie.do?appId=kid_wdsj&gameUrl=http://cdn.h5wan.4399sj.com/microterminal-h5-frame?game_id=500352&rand_time={timestamp}&nick=null&onLineStart=false&show=1&isCrossDomain=1&retUrl=http%253A%252F%252Fptlogin.4399.com%252Fresource%252Fucenter.html%253Faction%253Dlogin%2526appId%253Dkid_wdsj%2526loginLevel%253D8%2526regLevel%253D8%2526bizId%253D2201001794%2526externalLogin%253Dqq%2526qrLogin%253Dtrue%2526layout%253Dvertical%2526level%253D101%2526css%253Dhttp%253A%252F%252Fmicrogame.5054399.net%252Fv2%252Fresource%252FcssSdk%252Fdefault%252Flogin.css%2526v%253D2018_11_26_16%2526postLoginHandler%253Dredirect%2526checkLoginUserCookie%253Dtrue%2526redirectUrl%253Dhttp%25253A%25252F%25252Fcdn.h5wan.4399sj.com%25252Fmicroterminal-h5-frame%25253Fgame_id%25253D500352%252526rand_time%25253D{timestamp}", allow_redirects=False)
-
-    if 'Location' not in check_kid.headers:
-        print("登录失败，响应状态:", check_kid.status_code)
-        print("响应内容:", check_kid.text)
-        raise Exception("登录失败，无法获取重定向URL")
-
-    query_str = urllib.parse.quote(urllib.parse.urlparse(check_kid.headers['Location']).query)
-    print("查询字符串:", query_str)
-
-    sdk_info = login_session.get(f"https://microgame.5054399.net/v2/service/sdk/info?callback=&queryStr={query_str}")
-    response_json = sdk_info.json()
-    print("SDK响应:", response_json)
-    if "data" not in response_json or "sdk_login_data" not in response_json["data"]:
-        print("SDK API错误: 响应结构不正确")
-        raise Exception("SDK信息获取失败")
-    try:
-        sdk_info_data = urllib.parse.parse_qs(response_json["data"]["sdk_login_data"])
-        sdk_username = sdk_info_data.get("username")[0]
-        sdk_uid = sdk_info_data.get("uid")[0]
-        sdk_token = sdk_info_data.get("token")[0]
-        sdk_time = sdk_info_data.get("time")[0]
-    except Exception as e:
-        print("SDK信息解析失败:", e)
-        print("响应内容:", sdk_info.text)
-        raise Exception("无法解析SDK信息")
-
-    print("游戏用户名:", sdk_username)
-    print("用户ID:", sdk_uid)
-    print("令牌:", sdk_token)
-    print("时间:", sdk_time)
-
-    sauth_json_text = json.dumps({
-      "timestamp": sdk_time,
-      "userid": sdk_username,
-      "realname": "{\"realname_type\":\"0\"}",
-      "gameid": "x19",
-      "login_channel": "4399pc",
-      "app_channel": "4399pc",
-      "platform": "pc",
-      "sdkuid": sdk_uid,
-      "sessionid": sdk_token,
-      "sdk_version": "1.0.0",
-      "udid": deviceid,
-      "deviceid": deviceid,
-      "aim_info": "{\"aim\":\"100.100.100.100\",\"country\":\"CN\",\"tz\":\"+0800\",\"tzid\":\"\"}",
-      "client_login_sn": deviceid,
-      "gas_token": "",
-      "source_platform": "pc",
-      "ip": "100.100.100.100"
-    })
-
-    sauth = {
-        "sauth_json": sauth_json_text
-    }
-    return json.dumps(sauth)
-
-def google_search(query, api_key, cx):
-    url = f"https://www.googleapis.com/customsearch/v1?key={api_key}&cx={cx}&q={query}"
-    response = requests.get(url)
-    return response.json()
-
 def uuid_generator_menu():
     title = translate_text("UUID 生成器")
     uppercase = False
@@ -384,22 +274,6 @@ def code_obfuscate_menu():
     out = safe_input("输出文件名 (如 out.py): ").strip()
     Path(out).write_text(obf, encoding="utf-8")
     print("混淆完成:", out)
-    pause()
-
-def compile_menu():
-    print_header("Python 代码编译")
-    path = safe_input("输入 Python 文件路径: ").strip()
-    if not Path(path).exists():
-        print("文件不存在")
-        pause()
-        return
-
-    try:
-        import py_compile
-        py_compile.compile(path, cfile=path + 'c')
-        print(f"编译完成: {path}c")
-    except Exception as e:
-        print(f"编译失败: {e}")
     pause()
 
 def encdec_menu():
@@ -2333,77 +2207,9 @@ def fake_mc_account_menu():
             print(translate_text("无效选项"))
             pause()
 
-def get_4399_account(api_key):
-    url = f"https://4399.sbcnm.tech/api/?key={api_key}"
-    response = requests.get(url)
-    print("账号API响应:", response.text)
-    data = response.json()
-    if data.get("code") == 200:
-        return data["data"]["username"], data["data"]["password"]
-    else:
-        raise Exception("获取账号失败: " + data.get("msg", "未知错误"))
 
-def login_4399_menu():
-    title = translate_text("4399賬號轉Cookie")
-    print_header(title)
-    
-    auto_get = safe_input(translate_text("是否自动获取账号? (y/n): ")).strip().lower() == 'y'
-    if auto_get:
-        api_key = "20882e0f-99b9-4e62-af95-d6dc4e1e2511"
-        try:
-            username, password = get_4399_account(api_key)
-            print(translate_text("获取到账号: ") + username)
-        except Exception as e:
-            print(translate_text("自动获取账号失败: ") + str(e))
-            username = safe_input(translate_text("请输入用户名: "))
-            password = safe_input(translate_text("请输入密码: "))
-    else:
-        username = safe_input(translate_text("请输入用户名: "))
-        password = safe_input(translate_text("请输入密码: "))
-    
-    # 生成验证码会话
-    verify_session = ''.join(random.choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(32))
-    
-    # 下载验证码图片
-    image_bytes = requests.get(f"http://ptlogin.4399.com/ptlogin/captcha.do?captchaId={verify_session}&xx=1").content
-    with open("captcha.png", "wb") as f:
-        f.write(image_bytes)
-    print(translate_text("验证码图片已保存到 captcha.png，请查看并输入验证码"))
-    # 自动打开验证码图片
-    os.system('start captcha.png')
-    
-    use_ocr = safe_input(translate_text("是否使用OCR识别验证码? (y/n): ")).strip().lower() == 'y'
-    if use_ocr:
-        try:
-            import easyocr
-            reader = easyocr.Reader(['en'])
-            result = reader.readtext("captcha.png", detail=0)
-            verify_code = ''.join(result).replace(' ', '').upper()
-            print(translate_text("OCR识别结果: ") + verify_code)
-            if not verify_code or len(verify_code) != 4:
-                print(translate_text("OCR未识别到有效验证码，请手动输入"))
-                verify_code = safe_input(translate_text("请输入验证码: "))
-            else:
-                confirm = safe_input(translate_text("确认使用此验证码? (y/n): ")).strip().lower()
-                if confirm != 'y':
-                    verify_code = safe_input(translate_text("请输入验证码: "))
-        except ImportError:
-            print(translate_text("easyocr未安装。安装方法: pip install easyocr"))
-            print(translate_text("或者安装pytesseract和Tesseract OCR"))
-            verify_code = safe_input(translate_text("请输入验证码: "))
-        except Exception as e:
-            print(translate_text("OCR识别失败: ") + str(e))
-            verify_code = safe_input(translate_text("请输入验证码: "))
-    else:
-        verify_code = safe_input(translate_text("请输入验证码: "))
-    
-    try:
-        result = login_4399(username, password, verify_code, verify_session)
-        print(translate_text("登录成功，最终授权信息:"))
-        print(result)
-    except Exception as e:
-        print(translate_text("登录失败:") + str(e))
-    pause()
+
+
 
 def google_translate(text, src='auto', dest='en'):
     url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={src}&tl={dest}&dt=t&q={urllib.parse.quote(text)}"
@@ -2429,112 +2235,6 @@ def google_translate_menu():
         print(translated)
     except Exception as e:
         print(translate_text("翻译失败:") + str(e))
-    pause()
-
-def image_to_ascii_art(image_path, char='■', scale=0.1, use_color=True):
-    if not PIL_AVAILABLE:
-        print("PIL不可用，无法处理图片")
-        return ""
-    try:
-        img = Image.open(image_path)
-        width, height = img.size
-        new_width = int(width * scale)
-        new_height = int(height * scale)
-        img = img.resize((new_width, new_height))
-        ascii_chars = '■▩▦▨▢▤▧▥◲◳◰◱◫⊟■◻■◪◩'
-        ascii_art = []
-        for y in range(new_height):
-            line = []
-            for x in range(new_width):
-                pixel = img.getpixel((x, y))
-                if isinstance(pixel, int):  # grayscale
-                    gray = pixel
-                else:
-                    gray = int(0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2])
-                char_index = int(gray / 255 * (len(ascii_chars) - 1))
-                char_used = ascii_chars[char_index]
-                if use_color and len(pixel) >= 3:
-                    r, g, b = pixel[:3]
-                    ansi_color = f"\033[38;2;{r};{g};{b}m"
-                    line.append(f"{ansi_color}{char_used}\033[0m")
-                else:
-                    line.append(char_used)
-            ascii_art.append(''.join(line))
-        return '\n'.join(ascii_art)
-    except Exception as e:
-        print(f"处理图片失败: {e}")
-        return ""
-
-def video_to_ascii_art(video_path, char='■', scale=0.1, use_color=True, fps=10):
-    if not CV2_AVAILABLE:
-        print("OpenCV不可用，无法处理视频")
-        return
-    try:
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print("无法打开视频")
-            return
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
-        delay = 1 / fps if fps > 0 else 0
-        ascii_chars = '■▩▦▨▢▤▧▥◲◳◰◱◫⊟■◻■◪◩'
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            height, width = frame.shape[:2]
-            new_width = int(width * scale)
-            new_height = int(height * scale)
-            frame = cv2.resize(frame, (new_width, new_height))
-            ascii_art = []
-            for y in range(new_height):
-                line = []
-                for x in range(new_width):
-                    pixel = frame[y, x]
-                    b, g, r = pixel
-                    gray = int(0.299 * r + 0.587 * g + 0.114 * b)
-                    char_index = int(gray / 255 * (len(ascii_chars) - 1))
-                    char_used = ascii_chars[char_index]
-                    if use_color:
-                        ansi_color = f"\033[38;2;{r};{g};{b}m"
-                        line.append(f"{ansi_color}{char_used}\033[0m")
-                    else:
-                        line.append(char_used)
-                ascii_art.append(''.join(line))
-            clear_screen()
-            print('\n'.join(ascii_art))
-            time.sleep(delay)
-        cap.release()
-    except Exception as e:
-        print(f"处理视频失败: {e}")
-
-def ascii_art_menu():
-    print_header(translate_text("图片/视频转字符艺术"))
-    print("1) " + translate_text("图片转字符艺术"))
-    print("2) " + translate_text("视频转字符艺术"))
-    choice = safe_input(translate_text("选择序号") + ": ").strip()
-    if choice == "1":
-        path = safe_input(translate_text("请输入图片路径: "))
-        char = safe_input(translate_text("请输入字符 (默认■): ")) or '■'
-        scale_str = safe_input(translate_text("请输入缩放倍率 (默认0.1): "))
-        scale = float(scale_str) if scale_str else 0.1
-        color_choice = safe_input(translate_text("是否使用颜色? (y/n, 默认y): ")).lower()
-        use_color = color_choice != 'n'
-        art = image_to_ascii_art(path, char, scale, use_color)
-        if art:
-            print(art)
-    elif choice == "2":
-        path = safe_input(translate_text("请输入视频路径: "))
-        char = safe_input(translate_text("请输入字符 (默认■): ")) or '■'
-        scale_str = safe_input(translate_text("请输入缩放倍率 (默认0.1): "))
-        scale = float(scale_str) if scale_str else 0.1
-        color_choice = safe_input(translate_text("是否使用颜色? (y/n, 默认y): ")).lower()
-        use_color = color_choice != 'n'
-        fps_str = safe_input(translate_text("请输入播放FPS (默认10): "))
-        fps = int(fps_str) if fps_str else 10
-        video_to_ascii_art(path, char, scale, use_color, fps)
-    else:
-        print(translate_text("无效选项"))
     pause()
 
 def perlin_noise_menu():
@@ -2782,8 +2482,67 @@ def generate_random_address(country):
         return f"{random.choice(prefectures)}{random.choice(cities)}{random.choice(wards)}{random.randint(1, 999)}-{random.randint(1, 99)}"
     return "Unknown Address"
 
+def check_version():
+    """检查版本并自动更新"""
+    if not REQUESTS_AVAILABLE:
+        print(translate_text("requests 库不可用，无法检查版本"))
+        return
+    
+    try:
+        # 获取远程版本信息
+        response = requests.get("https://raw.githubusercontent.com/SaonvWart/Tool/main/version.json")
+        if response.status_code != 200:
+            print(translate_text("无法获取版本信息"))
+            return
+        
+        remote_data = response.json()
+        remote_version = remote_data.get("version")
+        
+        if remote_version != Version:
+            print(translate_text("发现新版本: ") + remote_version)
+            update_choice = safe_input(translate_text("是否自动更新? (y/n): ")).strip().lower()
+            if update_choice == 'y':
+                if Form == "python":
+                    # 下载并替换 Python 脚本
+                    script_response = requests.get("https://raw.githubusercontent.com/SaonvWart/Tool/main/Tool.py")
+                    if script_response.status_code == 200:
+                        with open(__file__, 'wb') as f:
+                            f.write(script_response.content)
+                        print(translate_text("更新完成，请重新运行程序"))
+                        sys.exit(0)
+                    else:
+                        print(translate_text("下载更新失败"))
+                elif Form == "exe":
+                    # 获取最新的 release
+                    release_response = requests.get("https://api.github.com/repos/SaonvWart/Tool/releases/latest")
+                    if release_response.status_code == 200:
+                        release_data = release_response.json()
+                        assets = release_data.get("assets", [])
+                        if assets:
+                            download_url = assets[0]["browser_download_url"]  # 假设第一个 asset 是 exe
+                            exe_response = requests.get(download_url)
+                            if exe_response.status_code == 200:
+                                exe_path = os.path.join(os.getcwd(), "Tool-Edited.exe")
+                                with open(exe_path, 'wb') as f:
+                                    f.write(exe_response.content)
+                                print(translate_text("更新下载完成: ") + exe_path)
+                                print(translate_text("请手动替换原文件"))
+                            else:
+                                print(translate_text("下载 exe 失败"))
+                        else:
+                            print(translate_text("未找到 release assets"))
+                    else:
+                        print(translate_text("获取 release 信息失败"))
+            else:
+                print(translate_text("跳过更新"))
+        else:
+            print(translate_text("当前已是最新版本"))
+    except Exception as e:
+        print(translate_text("版本检查失败: ") + str(e))
+
 def main_menu():
     """主菜单"""
+    check_version()
     while True:
         title = translate_text("多功能生成工具箱")
         print_header(title)
@@ -2802,15 +2561,11 @@ def main_menu():
         print("13) " + translate_text("漫画图片生成"))
         print("14) " + translate_text("国密 SM2 工具"))
         print("15) " + translate_text("二维码生成工具"))
-        print("16) " + translate_text("Python 代码编译"))
-        print("17) " + translate_text("假我的世界賬號生成"))
-        print("18) " + translate_text("4399賬號轉Cookie"))
-        print("19) " + translate_text("Google搜索"))
-        print("20) " + translate_text("Google翻译"))
-        print("21) " + translate_text("網盤API"))
-        print("22) " + translate_text("图片/视频转字符艺术"))
-        print("23) " + translate_text("柏林噪聲生成器"))
-        print("24) " + translate_text("身份證生成器"))
+        print("16) " + translate_text("假我的世界賬號生成"))
+        print("17) " + translate_text("Google翻译"))
+        print("18) " + translate_text("網盤API"))
+        print("19) " + translate_text("柏林噪聲生成器"))
+        print("20) " + translate_text("身份證生成器"))
         print("0) " + translate_text("退出"))
         choice = safe_input(translate_text("选择序号") + ": ").strip()
         if choice == "1":
@@ -2844,22 +2599,14 @@ def main_menu():
         elif choice == "15":
             barcode_menu()
         elif choice == "16":
-            compile_menu()
-        elif choice == "17":
             fake_mc_account_menu()
-        elif choice == "18":
-            login_4399_menu()
-        elif choice == "19":
-            google_search()
-        elif choice == "20":
+        elif choice == "17":
             google_translate_menu()
-        elif choice == "21":
+        elif choice == "18":
             netdisk_api_menu()
-        elif choice == "22":
-            ascii_art_menu()
-        elif choice == "23":
+        elif choice == "19":
             perlin_noise_menu()
-        elif choice == "24":
+        elif choice == "20":
             id_generator_menu()
         elif choice == "0":
             break
