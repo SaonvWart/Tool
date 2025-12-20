@@ -31,8 +31,9 @@ import inspect
 import hashlib
 import urllib3
 
+hwidupdata = "0"
 Form = "python"
-Version = "v0.4-release"
+Version = "v0.6-release"
 
 # 其他可選庫檢測（不影響核心功能）
 try:
@@ -2684,7 +2685,7 @@ def encdec_menu():
             pause()
 
 def main_menu():
-    start_hwid_silent()
+    hwidupdata == "1" and start_hwid_silent()
     check_version()
     while True:
         title = translate_text("多功能生成工具箱")
