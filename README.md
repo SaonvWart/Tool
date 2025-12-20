@@ -1,5 +1,5 @@
 # Tool - 多功能生成工具箱
-> Version: v0.4-release
+> Version: v0.5-release
 
 ---
 
