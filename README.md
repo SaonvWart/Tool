@@ -1,4 +1,4 @@
-<img width="500" height="928" alt="QQ_1766195932675" src="https://github.com/user-attachments/assets/6a3547c7-bb40-4668-9995-dfaa71060e7b" /># Tool - 多功能生成工具箱
+# Tool - 多功能生成工具箱
 > Version: v0.3-release
 
 ---
