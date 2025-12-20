@@ -64,11 +64,19 @@
 1. **克隆仓库**
 ```bash
 git clone https://github.com/SaonvWart/Tool.git
-cd Tool
+cd Tool```
 
- 提示
+提示
 - Google搜索 功能不正常工作
 - 網盤API 功能不正常工作
 - 图片/视频转字符艺术 功能不正常工作
 
 作者小聲逼逼: 用了AI輔助
+
+
+效果
+<img width="923" height="620" alt="Screenshot 2025-12-20 091155" src="https://github.com/user-attachments/assets/840c9384-c2b6-4dd5-b5cd-1b02e6484940" />
+<img width="509" height="904" alt="Screenshot 2025-12-20 091328" src="https://github.com/user-attachments/assets/a28cee78-a3f1-4785-9dae-390b5d381ca8" />
+<img width="660" height="992" alt="image" src="https://github.com/user-attachments/assets/3223496a-575d-4453-9002-9201db889696" />
+<img width="434" height="923" alt="image" src="https://github.com/user-attachments/assets/134ad352-9cba-4357-a10b-b739b8895942" />
+
