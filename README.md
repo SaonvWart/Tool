@@ -99,7 +99,7 @@
 
 ### 系统要求
 - Python **3.7+**
-- 支持 Windows / Linux / macOS
+- 支持 Windows
 
 ---
 
