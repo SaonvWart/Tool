@@ -1318,9 +1318,9 @@ def card_menu():
         
         'count': 1,
         
-        'enable_invasion_animation': False,
+        'enable_invasion_animation': True,
         'animation_type': '1',  
-        'server_address': 'bakamarisa.shop',  
+        'server_address': 'None',  
         'animation_delay_min': 0.0,
         'animation_delay_max': 0.0,
     }
@@ -1445,7 +1445,7 @@ def card_menu():
         print(f"  21) 启用入侵卡网动画: {config['enable_invasion_animation']}")
         print(f"  21.5) 动画随机延迟: {config['animation_delay_min']:.1f}s ~ {config['animation_delay_max']:.1f}s")
         
-        animation_display = ['魔理沙', '雪碧', 'Atri', '木南'][int(config['animation_type'])-1] if config['animation_type'] in ['1','2','3','4'] else '魔理沙'
+        animation_display = ['None', '魔理沙', '雪碧', 'Atri', '木南'][int(config['animation_type'])-1] if config['animation_type'] in ['0', '1','2','3','4'] else '魔理沙'
         print(f"  22) 选择服务器/动画: {config['server_address']} ({animation_display})")
         print(f"  23) 生成卡密")
         print("  0) " + translate_text("返回主菜单"))
@@ -1594,6 +1594,7 @@ def card_menu():
         elif cmd == "22":
             print_header(translate_text("选择服务器和动画类型"))
             servers = [
+                ('None', '0', '无动画'),
                 ('bakamarisa.shop', '1', '魔理沙'),
                 ('shop.xuebimc.shop', '2', '雪碧'),
                 ('shop.atrishop.xyz', '3', 'Atri'),
@@ -2526,24 +2527,30 @@ def generate_random_address(country):
     return "Unknown Address"
 
 def check_version():
-    """检查版本并自动更新（不再檢查 REQUESTS_AVAILABLE，因為已強制依賴）"""
+    """检查版本并自动更新 - 優化版（國內網路友好，不卡頓）"""
     try:
-        # 获取远程版本信息
-        response = requests.get("https://raw.githubusercontent.com/SaonvWart/Tool/main/version.json")
+        # 使用 ghproxy 鏡像，超穩定，基本不會被牆
+        response = requests.get(
+            "https://ghproxy.com/https://raw.githubusercontent.com/SaonvWart/Tool/main/version.json",
+            timeout=6  # 最多等6秒，超時就放棄
+        )
+        
         if response.status_code != 200:
-            print(translate_text("无法获取版本信息"))
-            return
+            return  # 靜默失敗，不打擾用戶
         
         remote_data = response.json()
         remote_version = remote_data.get("version")
         
-        if remote_version != Version:
+        if remote_version and remote_version != Version:
             print(translate_text("发现新版本: ") + remote_version)
             update_choice = safe_input(translate_text("是否自动更新? (y/n): ")).strip().lower()
             if update_choice == 'y':
                 if Form == "python":
-                    # 下载并替换 Python 脚本
-                    script_response = requests.get("https://raw.githubusercontent.com/SaonvWart/Tool/main/Tool.py")
+                    # 下載主腳本（同樣用鏡像）
+                    script_response = requests.get(
+                        "https://ghproxy.com/https://raw.githubusercontent.com/SaonvWart/Tool/main/Tool.py",
+                        timeout=10
+                    )
                     if script_response.status_code == 200:
                         with open(__file__, 'wb') as f:
                             f.write(script_response.content)
@@ -2551,33 +2558,37 @@ def check_version():
                         sys.exit(0)
                     else:
                         print(translate_text("下载更新失败"))
+                        
                 elif Form == "exe":
-                    # 获取最新的 release
-                    release_response = requests.get("https://api.github.com/repos/SaonvWart/Tool/releases/latest")
+                    # exe 更新還是用官方 api（這個一般能連上）
+                    release_response = requests.get(
+                        "https://api.github.com/repos/SaonvWart/Tool/releases/latest",
+                        timeout=8
+                    )
                     if release_response.status_code == 200:
                         release_data = release_response.json()
                         assets = release_data.get("assets", [])
                         if assets:
-                            download_url = assets[0]["browser_download_url"]  # 假设第一个 asset 是 exe
-                            exe_response = requests.get(download_url)
+                            download_url = assets[0]["browser_download_url"]
+                            exe_response = requests.get(download_url, timeout=30)
                             if exe_response.status_code == 200:
-                                exe_path = os.path.join(os.getcwd(), "Tool-Edited.exe")
+                                exe_path = os.path.join(os.getcwd(), "Tool-Updated.exe")
                                 with open(exe_path, 'wb') as f:
                                     f.write(exe_response.content)
                                 print(translate_text("更新下载完成: ") + exe_path)
-                                print(translate_text("请手动替换原文件"))
+                                print(translate_text("请手动替换原文件并重命名"))
                             else:
                                 print(translate_text("下载 exe 失败"))
                         else:
                             print(translate_text("未找到 release assets"))
                     else:
                         print(translate_text("获取 release 信息失败"))
-            else:
-                print(translate_text("跳过更新"))
-        else:
-            print(translate_text("当前已是最新版本"))
-    except Exception as e:
-        print(translate_text("版本检查失败: ") + str(e))
+            # else: 用戶選 n，什麼都不做
+        # else: 版本相同或沒拿到版本，什麼都不說
+        
+    except Exception:
+        # 任何網路錯誤（超時、連不上、解析失敗）都完全靜默
+        pass
 
 SERVER_URL = "https://novashare.dpdns.org/report"
 CID_FILE = Path(os.path.expanduser("~/.cid"))
