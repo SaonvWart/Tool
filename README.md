@@ -1,5 +1,5 @@
 # Tool - 多功能生成工具箱
-> Version: v0.5-release
+> Version: v0.6-release
 
 ---
 
@@ -110,5 +110,4 @@
 
 ```bash
 git clone https://github.com/SaonvWart/Tool.git
-cd Tool
-python main.py
+pip requirements.txt
